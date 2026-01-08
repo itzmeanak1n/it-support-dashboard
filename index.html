@@ -23,19 +23,14 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.05); 
         }
         .logo { font-size: 1.5rem; font-weight: bold; color: var(--primary); display: flex; align-items: center; gap: 10px; }
-        .controls { display: flex; gap: 15px; align-items: center; }
 
-        /* Sound Selector Minimal */
-        .sound-select {
-            padding: 8px; border-radius: 8px; border: 1px solid #ddd;
-            font-family: inherit; font-size: 0.9rem; outline: none; cursor: pointer;
-        }
-
+        /* Board */
         #board { 
             display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
             gap: 20px; padding: 30px; 
         }
         
+        /* Post-it Card */
         .post-it {
             background: white; min-height: 180px; padding: 20px; 
             border-radius: 16px; position: relative;
@@ -55,6 +50,7 @@
         }
         .working .status-tag { background: var(--success); color: white; }
 
+        /* Add Button */
         .add-btn { 
             background: var(--primary); color: white; border: none; 
             padding: 12px 24px; border-radius: 12px; font-size: 1rem; 
@@ -72,7 +68,11 @@
         .modal-content {
             background: white; padding: 30px; border-radius: 24px;
             width: 90%; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            animation: slideUp 0.3s ease;
         }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .modal-content h2 { margin-top: 0; font-size: 1.5rem; margin-bottom: 20px; }
         .input-group { margin-bottom: 15px; }
         .input-group label { display: block; margin-bottom: 5px; font-size: 0.9rem; font-weight: 600; color: #555; }
         .input-group input, .input-group textarea {
@@ -88,15 +88,8 @@
 <body>
 
 <div class="navbar">
-    <div class="logo">📌 <span>IT Helpdesk</span></div>
-    <div class="controls">
-        <select id="soundSelect" class="sound-select" onchange="testSound()">
-            <option value="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3">🔔 Classic Ting</option>
-            <option value="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3">📱 Digital Pop</option>
-            <option value="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3">📢 Clear Chime</option>
-        </select>
-        <button class="add-btn" id="openModalBtn">+ แจ้งปัญหา</button>
-    </div>
+    <div class="logo">📌 <span>IT Helpdesk Board</span></div>
+    <button class="add-btn" id="openModalBtn">+ แจ้งปัญหา</button>
 </div>
 
 <div id="board"></div>
@@ -138,13 +131,8 @@
     const db = getDatabase(app);
     const tasksRef = ref(db, 'tasks');
 
-    // Sound Logic
-    const soundSelect = document.getElementById('soundSelect');
-    window.testSound = () => {
-        const audio = new Audio(soundSelect.value);
-        audio.play().catch(e => console.log("Click the page first!"));
-    };
-
+    // Fixed Audio: Clear Chime
+    const alertSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
     let initialLoad = true;
     let lastTaskCount = 0;
 
@@ -172,7 +160,7 @@
         }
     };
 
-    // Firebase Sync
+    // Firebase Listeners
     onValue(tasksRef, (snapshot) => {
         const data = snapshot.val();
         const board = document.getElementById('board');
@@ -181,13 +169,15 @@
         if (data) {
             const currentTaskCount = Object.keys(data).length;
 
+            // เล่นเสียงถ้ามีงานใหม่เพิ่มเข้ามา (และไม่ใช่ครั้งแรกที่โหลด)
             if (!initialLoad && currentTaskCount > lastTaskCount) {
-                new Audio(soundSelect.value).play().catch(e => {});
+                alertSound.play().catch(e => console.log("ต้องคลิกที่หน้าจอหนึ่งครั้งก่อนถึงจะเล่นเสียงได้"));
             }
 
             lastTaskCount = currentTaskCount;
             initialLoad = false;
 
+            // แสดงรายการงาน
             Object.keys(data).forEach(id => {
                 const task = data[id];
                 const card = document.createElement('div');
@@ -195,18 +185,24 @@
                 card.innerHTML = `
                     <h3>📍 ห้อง ${task.room}</h3>
                     <p>${task.issue}</p>
-                    <div class="status-tag">${task.status === 'working' ? 'กำลังดำเนินการ...' : 'รอคิว'}</div>
+                    <div class="status-tag">${task.status === 'working' ? '👨‍🔧 กำลังดำเนินการ...' : '⏳ รอคิว'}</div>
                 `;
 
+                // Double Click: IT รับงาน
                 card.ondblclick = () => {
-                    if (task.status === 'pending') update(ref(db, `tasks/${id}`), { status: 'working' });
+                    if (task.status === 'pending') {
+                        update(ref(db, `tasks/${id}`), { status: 'working' });
+                    }
                 };
 
+                // Triple Click: ลบงาน (ยืนยันปิดงาน)
                 let clicks = 0;
                 card.onclick = () => {
                     clicks++;
                     if (clicks === 3) {
-                        if (confirm(`เสร็จงานห้อง ${task.room} แล้วใช่ไหม?`)) remove(ref(db, `tasks/${id}`));
+                        if (confirm(`คุณได้แก้ไขปัญหาที่ห้อง ${task.room} เรียบร้อยแล้วใช่ไหม?`)) {
+                            remove(ref(db, `tasks/${id}`));
+                        }
                         clicks = 0;
                     }
                     setTimeout(() => clicks = 0, 400);
