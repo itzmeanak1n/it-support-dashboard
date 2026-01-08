@@ -16,7 +16,6 @@
 
         body { background: var(--bg); margin: 0; font-family: 'Inter', 'Kanit', sans-serif; color: #333; }
         
-        /* Navbar */
         .navbar { 
             background: white; padding: 1rem 2rem; 
             display: flex; justify-content: space-between; align-items: center; 
@@ -25,13 +24,11 @@
         }
         .logo { font-size: 1.5rem; font-weight: bold; color: var(--primary); display: flex; align-items: center; gap: 10px; }
 
-        /* Board */
         #board { 
             display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); 
             gap: 20px; padding: 30px; 
         }
         
-        /* Minimal Post-it */
         .post-it {
             background: white; min-height: 180px; padding: 20px; 
             border-radius: 16px; position: relative;
@@ -43,7 +40,7 @@
         .post-it.working { border: 2px solid var(--success); background: #f0fff4; }
         
         .post-it h3 { margin: 0 0 10px 0; font-size: 1.2rem; color: var(--primary); }
-        .post-it p { margin: 0; font-size: 0.95rem; color: #666; line-height: 1.5; }
+        .post-it p { margin: 0; font-size: 0.95rem; color: #666; line-height: 1.5; word-wrap: break-word; }
         .status-tag { 
             margin-top: 15px; font-size: 0.8rem; font-weight: 600;
             display: inline-block; padding: 4px 12px; border-radius: 20px;
@@ -51,7 +48,6 @@
         }
         .working .status-tag { background: var(--success); color: white; }
 
-        /* Modern Add Button */
         .add-btn { 
             background: var(--primary); color: white; border: none; 
             padding: 12px 24px; border-radius: 12px; font-size: 1rem; 
@@ -60,7 +56,6 @@
         }
         .add-btn:hover { background: #1a252f; transform: scale(1.02); }
 
-        /* --- Minimal Modal Form --- */
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0;
             width: 100%; height: 100%; background: rgba(0,0,0,0.4);
@@ -79,7 +74,6 @@
         .input-group input, .input-group textarea {
             width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px;
             box-sizing: border-box; font-family: inherit; font-size: 1rem; outline: none;
-            transition: border 0.2s;
         }
         .input-group input:focus, .input-group textarea:focus { border-color: var(--accent); }
         
@@ -135,7 +129,12 @@
     const db = getDatabase(app);
     const tasksRef = ref(db, 'tasks');
 
-    // UI Logic
+    // Audio & State Logic
+    const alertSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+    let initialLoad = true;
+    let lastTaskCount = 0;
+
+    // UI Elements
     const modal = document.getElementById('todoModal');
     const openBtn = document.getElementById('openModalBtn');
     const closeBtn = document.getElementById('closeModalBtn');
@@ -149,7 +148,6 @@
         document.getElementById('issueInput').value = '';
     }
 
-    // Save Data to Firebase
     saveBtn.onclick = () => {
         const room = document.getElementById('roomInput').value;
         const issue = document.getElementById('issueInput').value;
@@ -162,12 +160,24 @@
         }
     };
 
-    // Render Data
+    // Main Listen & Render Function
     onValue(tasksRef, (snapshot) => {
+        const data = snapshot.val();
         const board = document.getElementById('board');
         board.innerHTML = '';
-        const data = snapshot.val();
+        
         if (data) {
+            const currentTaskCount = Object.keys(data).length;
+
+            // เสียงเตือน: ดังเมื่อมีงานเพิ่ม และไม่ใช่ครั้งแรกที่เปิดเว็บ
+            if (!initialLoad && currentTaskCount > lastTaskCount) {
+                alertSound.play().catch(e => console.log("คลิกหน้าจอหนึ่งครั้งเพื่ออนุญาตให้เล่นเสียง"));
+            }
+
+            lastTaskCount = currentTaskCount;
+            initialLoad = false;
+
+            // วาดการ์ด
             Object.keys(data).forEach(id => {
                 const task = data[id];
                 const card = document.createElement('div');
@@ -178,10 +188,12 @@
                     <div class="status-tag">${task.status === 'working' ? 'กำลังดำเนินการ...' : 'รอคิว'}</div>
                 `;
 
+                // Double Click: รับงาน
                 card.ondblclick = () => {
                     if (task.status === 'pending') update(ref(db, `tasks/${id}`), { status: 'working' });
                 };
 
+                // Triple Click: ลบงาน
                 let clicks = 0;
                 card.onclick = () => {
                     clicks++;
@@ -193,6 +205,9 @@
                 };
                 board.appendChild(card);
             });
+        } else {
+            lastTaskCount = 0;
+            initialLoad = false;
         }
     });
 </script>
